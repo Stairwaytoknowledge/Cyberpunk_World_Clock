@@ -1,0 +1,561 @@
+import os
+import sys
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton,
+                              QHBoxLayout, QVBoxLayout, QGraphicsDropShadowEffect)
+from PyQt6.QtCore import Qt, QTimer, QPoint, QPointF, QRectF, QRect
+from PyQt6.QtGui import (QPainter, QColor, QPen, QPainterPath, QLinearGradient,
+                          QRadialGradient, QPalette, QRegion, QBrush, QFontDatabase)
+from src.clock_manager import ClockManager
+from src.config_manager import ConfigManager
+from src.city_selector_qt import CitySelectorQt
+
+
+MIN_CITIES = 4
+MAX_CITIES = 6
+
+# Primary display font. Orbitron is a free cyberpunk-flavoured geometric
+# sans shipped under the SIL OFL 1.1 in assets/fonts/. We load it at
+# runtime so the widget looks identical on every machine even though
+# Orbitron is not a default Windows font.
+CYBERPUNK_FONT = "Orbitron"
+FALLBACK_STACK = "'Orbitron', 'Rajdhani', 'Chakra Petch', 'Cascadia Code', 'Consolas', monospace"
+
+_FONT_LOADED = False
+
+
+def _load_bundled_font():
+    """Register the bundled Orbitron font with Qt the first time a widget
+    is constructed. Silently falls back to the system font stack if the
+    file is missing (e.g. running from a stripped clone without running
+    generate_icons.py)."""
+    global _FONT_LOADED
+    if _FONT_LOADED:
+        return
+    # Resolve asset path whether running from the project root (dev mode)
+    # or from the release bundle (install folder).
+    candidates = [
+        os.path.join("assets", "fonts", "Orbitron-VariableFont_wght.ttf"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "assets", "fonts", "Orbitron-VariableFont_wght.ttf"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            fid = QFontDatabase.addApplicationFont(path)
+            if fid >= 0:
+                _FONT_LOADED = True
+                return
+    # Not found - the CSS fallback stack kicks in. Not fatal.
+    _FONT_LOADED = True  # don't retry every construction
+
+
+class ClockWidgetQt(QWidget):
+    """Production-ready Apple Watch Liquid Drop clock widget"""
+
+    def __init__(self):
+        super().__init__()
+
+        _load_bundled_font()
+
+        # Initialize managers
+        self.config_manager = ConfigManager()
+        self.clock_manager = ClockManager()
+
+        # Load configuration
+        self.config = self.config_manager.load_config()
+        self.cities = self.config["cities"]
+        # Clamp persisted city count to supported range (handles configs
+        # that were edited by hand or copied from an older/newer version).
+        if len(self.cities) < MIN_CITIES:
+            defaults = self.config_manager.get_default_cities()
+            while len(self.cities) < MIN_CITIES:
+                self.cities.append(defaults[len(self.cities) % len(defaults)])
+        if len(self.cities) > MAX_CITIES:
+            self.cities = self.cities[:MAX_CITIES]
+        self.config["cities"] = self.cities
+
+        # State
+        self.drag_position = None
+        self.controls_visible = False
+
+        # Setup
+        self.setup_window()
+        self.create_ui()
+
+        # Start clock
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_clocks)
+        self.timer.start(1000)
+        self.update_clocks()
+
+    def setup_window(self):
+        """Configure window for production"""
+        # CRITICAL FIX: Proper window flags to stay in background
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnBottomHint |
+            Qt.WindowType.Tool |
+            Qt.WindowType.X11BypassWindowManagerHint  # Extra hint for staying behind
+        )
+
+        # Transparency
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+
+        # Size
+        self.setFixedSize(920, 180)
+
+        # Position
+        x = self.config["window_position"]["x"]
+        y = self.config["window_position"]["y"]
+
+        if x is None or y is None:
+            screen = QApplication.primaryScreen().geometry()
+            x = (screen.width() - 920) // 2
+            y = 50
+
+        self.move(x, y)
+
+    def create_ui(self):
+        """Create UI elements"""
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Content container
+        content_widget = QWidget()
+        content_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(40, 30, 40, 20)
+        content_layout.setSpacing(8)
+
+        # Clocks row - rebuilt whenever the city count changes
+        self.clocks_layout = QHBoxLayout()
+        self.clock_labels = []
+        self._rebuild_clock_row()
+
+        content_layout.addLayout(self.clocks_layout)
+        content_layout.addStretch()
+
+        # Buttons
+        self.create_control_buttons()
+        content_layout.addLayout(self.buttons_layout)
+        self.hide_controls()
+
+        main_layout.addWidget(content_widget)
+
+    def _rebuild_clock_row(self):
+        """Tear down and re-create clock displays for the current city count.
+        Called on init and whenever the user adds/removes a city."""
+        # Remove existing widgets
+        while self.clocks_layout.count():
+            item = self.clocks_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self.clock_labels = []
+
+        # Orbitron glyphs are ~30% wider than Segoe UI, so the digit sizes
+        # that worked before would clip at 5/6 cities. These numbers keep
+        # "HH:MM:SS" inside each column with a little slack on every count.
+        n = len(self.cities)
+        spacing = {4: 28, 5: 18, 6: 10}.get(n, 28)
+        time_pt = {4: 20, 5: 17, 6: 14}.get(n, 20)
+        self.clocks_layout.setSpacing(spacing)
+
+        for i in range(n):
+            clock = self.create_clock_display(i, time_pt=time_pt)
+            self.clocks_layout.addWidget(clock)
+            self.clock_labels.append(clock)
+
+    def create_clock_display(self, index, time_pt=24):
+        """Create single clock"""
+        container = QWidget()
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        layout = QVBoxLayout(container)
+        layout.setSpacing(3)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # City - muted electric cyan, uppercase for cyber feel
+        city_label = QLabel("LOADING")
+        city_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(120, 210, 235, 210);
+                font-family: {FALLBACK_STACK};
+                font-size: 9pt;
+                font-weight: 600;
+                letter-spacing: 2px;
+                background: transparent;
+            }}
+            QLabel:hover {{
+                color: rgba(0, 245, 255, 255);
+            }}
+        """)
+        city_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        city_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        city_label.mousePressEvent = lambda e, idx=index: self.change_city(idx)
+        layout.addWidget(city_label)
+
+        # Time - bright electric cyan with soft neon glow (see below)
+        time_label = QLabel("00:00:00")
+        time_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(225, 250, 255, 255);
+                font-family: {FALLBACK_STACK};
+                font-size: {time_pt}pt;
+                font-weight: 800;
+                background: transparent;
+            }}
+        """)
+        time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Neon glow: zero-offset cyan drop shadow with large blur radius
+        glow = QGraphicsDropShadowEffect(time_label)
+        glow.setBlurRadius(22)
+        glow.setOffset(0, 0)
+        glow.setColor(QColor(0, 229, 255, 220))
+        time_label.setGraphicsEffect(glow)
+        layout.addWidget(time_label)
+
+        # Date - dim cyan
+        date_label = QLabel("00-00")
+        date_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(140, 195, 220, 180);
+                font-family: {FALLBACK_STACK};
+                font-size: 9pt;
+                font-weight: 500;
+                letter-spacing: 1px;
+                background: transparent;
+            }}
+        """)
+        date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(date_label)
+
+        # DST alert - neon magenta, hidden until within 7 days of fall-back
+        dst_label = QLabel("")
+        dst_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 90, 190, 240);
+                font-family: {FALLBACK_STACK};
+                font-size: 8pt;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                background: transparent;
+            }}
+        """)
+        dst_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        dst_label.hide()
+        # Subtle magenta glow to match the cyber theme
+        dst_glow = QGraphicsDropShadowEffect(dst_label)
+        dst_glow.setBlurRadius(14)
+        dst_glow.setOffset(0, 0)
+        dst_glow.setColor(QColor(255, 90, 190, 180))
+        dst_label.setGraphicsEffect(dst_glow)
+        layout.addWidget(dst_label)
+
+        container.city_label = city_label
+        container.time_label = time_label
+        container.date_label = date_label
+        container.dst_label = dst_label
+
+        return container
+
+    def create_control_buttons(self):
+        """Create buttons"""
+        self.buttons_layout = QHBoxLayout()
+        self.buttons_layout.addStretch()
+        self.buttons_layout.setSpacing(8)
+
+        # Shared cyberpunk button base - subtle translucent dark fill,
+        # cyan border that brightens on hover.
+        cyber_btn_css = """
+            QPushButton {
+                background: rgba(20, 32, 52, 160);
+                color: rgba(190, 240, 255, 240);
+                border: 1px solid rgba(0, 229, 255, 120);
+                border-radius: 8px;
+                font-family: %s;
+                font-size: 13pt;
+                font-weight: 700;
+            }
+            QPushButton:hover {
+                background: rgba(0, 60, 90, 200);
+                color: rgba(230, 250, 255, 255);
+                border: 1px solid rgba(0, 245, 255, 220);
+            }
+            QPushButton:pressed { background: rgba(0, 100, 140, 220); }
+            QPushButton:disabled {
+                color: rgba(120, 170, 200, 80);
+                border: 1px solid rgba(0, 229, 255, 40);
+            }
+        """ % FALLBACK_STACK
+
+        # Remove-city ( - )  /  Add-city ( + )
+        minus_btn = QPushButton("\u2212")
+        minus_btn.setFixedSize(32, 32)
+        minus_btn.setStyleSheet(cyber_btn_css)
+        minus_btn.clicked.connect(self.remove_city)
+        minus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        minus_btn.setToolTip("Remove last city")
+        self.buttons_layout.addWidget(minus_btn)
+
+        plus_btn = QPushButton("+")
+        plus_btn.setFixedSize(32, 32)
+        plus_btn.setStyleSheet(cyber_btn_css)
+        plus_btn.clicked.connect(self.add_city)
+        plus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        plus_btn.setToolTip("Add a city (max 6)")
+        self.buttons_layout.addWidget(plus_btn)
+
+        self.minus_btn = minus_btn
+        self.plus_btn = plus_btn
+        self._refresh_count_buttons()
+
+        # Settings - same cyan theme as +/-
+        settings_btn = QPushButton("\u2699")
+        settings_btn.setFixedSize(45, 32)
+        settings_btn.setStyleSheet(cyber_btn_css)
+        settings_btn.clicked.connect(self.show_settings)
+        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.buttons_layout.addWidget(settings_btn)
+
+        # Close - red accent so it still reads as destructive
+        close_btn = QPushButton("\u2715")
+        close_btn.setFixedSize(45, 32)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(40, 12, 20, 180);
+                color: rgba(255, 190, 200, 245);
+                border: 1px solid rgba(255, 80, 110, 180);
+                border-radius: 8px;
+                font-family: {FALLBACK_STACK};
+                font-size: 13pt;
+                font-weight: 800;
+            }}
+            QPushButton:hover {{
+                background: rgba(120, 20, 40, 230);
+                color: rgba(255, 230, 240, 255);
+                border: 1px solid rgba(255, 100, 140, 255);
+            }}
+            QPushButton:pressed {{ background: rgba(180, 30, 50, 255); }}
+        """)
+        close_btn.clicked.connect(self.close_app)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.buttons_layout.addWidget(close_btn)
+
+        self.settings_btn = settings_btn
+        self.close_btn = close_btn
+
+    def paintEvent(self, event):
+        """Cyberpunk pill: translucent dark slate body with a cyan neon rim
+        and a soft scanline highlight near the top.  Much more see-through
+        than the old Apple-style pane - the main fill alpha sits around
+        130/255 (~50%) so the desktop shows through."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Pill geometry (fixed-corner oval)
+        rect = self.rect()
+        path = QPainterPath()
+        radius = 90
+        path.addRoundedRect(QRectF(rect), radius, radius)
+        painter.setClipPath(path)
+
+        # Layer 1: Outer cyan glow halo (very faint concentric rings)
+        for i in range(10, 0, -1):
+            halo = QColor(0, 229, 255, max(0, int(12 - i * 1.1)))
+            r = rect.adjusted(i, i, -i, -i)
+            p = QPainterPath()
+            p.addRoundedRect(QRectF(r), radius - i, radius - i)
+            painter.fillPath(p, halo)
+
+        # Layer 2: Main body - dark slate gradient, deliberately translucent
+        main_rect = rect.adjusted(8, 8, -8, -8)
+        gradient = QLinearGradient(
+            QPointF(main_rect.center().x(), main_rect.top()),
+            QPointF(main_rect.center().x(), main_rect.bottom()),
+        )
+        # alpha 130-150 = roughly 55% translucent
+        gradient.setColorAt(0.0, QColor(14,  22,  36, 135))   # top     - deep slate blue
+        gradient.setColorAt(0.5, QColor(20,  32,  52, 150))   # middle  - a touch lighter
+        gradient.setColorAt(1.0, QColor(10,  16,  28, 140))   # bottom  - darkest for depth
+        main_path = QPainterPath()
+        main_path.addRoundedRect(QRectF(main_rect), radius - 8, radius - 8)
+        painter.fillPath(main_path, gradient)
+
+        # Layer 3: Cyan neon rim
+        painter.setPen(QPen(QColor(0, 229, 255, 150), 1.4))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(main_path)
+
+        # Layer 4: Inner soft cyan halo just inside the rim (adds the
+        # "this thing is emitting light" feel without going overboard).
+        painter.setPen(QPen(QColor(0, 229, 255, 55), 2.5))
+        inner_rect = main_rect.adjusted(3, 3, -3, -3)
+        inner_path = QPainterPath()
+        inner_path.addRoundedRect(QRectF(inner_rect), radius - 11, radius - 11)
+        painter.drawPath(inner_path)
+
+        # Layer 5: Top scanline highlight - horizontal cyan streak that
+        # fades down. Gives a CRT / HUD vibe.
+        scan_rect = QRectF(main_rect.x() + 12, main_rect.y() + 10,
+                           main_rect.width() - 24, 32)
+        scan = QLinearGradient(
+            QPointF(scan_rect.center().x(), scan_rect.top()),
+            QPointF(scan_rect.center().x(), scan_rect.bottom()),
+        )
+        scan.setColorAt(0.0, QColor(120, 240, 255, 70))
+        scan.setColorAt(1.0, QColor(120, 240, 255, 0))
+        scan_path = QPainterPath()
+        scan_path.addRoundedRect(scan_rect, radius - 20, radius - 20)
+        painter.fillPath(scan_path, scan)
+
+    def resizeEvent(self, event):
+        """Apply mask on resize to clip to pill shape"""
+        super().resizeEvent(event)
+        # Create region mask for pill shape
+        region = QRegion(self.rect(), QRegion.RegionType.Ellipse)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), 90, 90)
+        region = QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(region)
+
+    def update_clocks(self):
+        """Update clocks"""
+        clock_data = self.clock_manager.get_all_clock_data(self.cities)
+        for i, data in enumerate(clock_data):
+            if i < len(self.clock_labels):
+                slot = self.clock_labels[i]
+                slot.city_label.setText(data["city"].upper())
+                slot.time_label.setText(data["time"])
+                slot.date_label.setText(data["date"])
+                alert = data.get("dst_alert", "")
+                if alert:
+                    slot.dst_label.setText(alert)
+                    slot.dst_label.show()
+                else:
+                    slot.dst_label.hide()
+
+    def _refresh_count_buttons(self):
+        """Enable/disable +/- buttons at the supported limits."""
+        n = len(self.cities)
+        if hasattr(self, "minus_btn"):
+            self.minus_btn.setEnabled(n > MIN_CITIES)
+        if hasattr(self, "plus_btn"):
+            self.plus_btn.setEnabled(n < MAX_CITIES)
+
+    def add_city(self):
+        """Append a new city slot (max MAX_CITIES). Opens the picker
+        immediately so the user doesn't end up with a duplicate clock."""
+        if len(self.cities) >= MAX_CITIES:
+            return
+        # Seed with a sensible default (UTC) so the slot has SOMETHING
+        # if the user dismisses the picker.
+        self.cities.append({"name": "UTC", "timezone": "UTC"})
+        self.config["cities"] = self.cities
+        self.config_manager.save_config(self.config)
+        self._rebuild_clock_row()
+        self._refresh_count_buttons()
+        self.update_clocks()
+        # Prompt the user to pick a real city for the new slot
+        self.change_city(len(self.cities) - 1)
+
+    def remove_city(self):
+        """Remove the last city slot (min MIN_CITIES)."""
+        if len(self.cities) <= MIN_CITIES:
+            return
+        self.cities.pop()
+        self.config["cities"] = self.cities
+        self.config_manager.save_config(self.config)
+        self._rebuild_clock_row()
+        self._refresh_count_buttons()
+        self.update_clocks()
+
+    def change_city(self, index):
+        """Change city"""
+        # Temporarily to front
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnBottomHint, False)
+        self.show()
+
+        selector = CitySelectorQt(self)
+        city, timezone = selector.show_dialog()
+
+        # Back to background
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnBottomHint, True)
+        self.show()
+
+        if city and timezone:
+            self.cities[index] = {"name": city, "timezone": timezone}
+            self.config["cities"] = self.cities
+            self.config_manager.save_config(self.config)
+            self.update_clocks()
+
+    def show_settings(self):
+        """Settings"""
+        pass  # TODO: Add settings dialog
+
+    def show_controls(self):
+        """Show buttons"""
+        if not self.controls_visible:
+            self.minus_btn.show()
+            self.plus_btn.show()
+            self.settings_btn.show()
+            self.close_btn.show()
+            self.controls_visible = True
+
+    def hide_controls(self):
+        """Hide buttons"""
+        if hasattr(self, "minus_btn"):
+            self.minus_btn.hide()
+            self.plus_btn.hide()
+        self.settings_btn.hide()
+        self.close_btn.hide()
+        self.controls_visible = False
+
+    def enterEvent(self, event):
+        """Mouse enter"""
+        self.show_controls()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Mouse leave"""
+        self.hide_controls()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        """Mouse press"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        """Mouse move"""
+        if event.buttons() == Qt.MouseButton.LeftButton and self.drag_position:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+
+    def mouseReleaseEvent(self, event):
+        """Mouse release"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = None
+            self.config["window_position"]["x"] = self.x()
+            self.config["window_position"]["y"] = self.y()
+            self.config_manager.save_config(self.config)
+
+    def close_app(self):
+        """Close"""
+        self.config["window_position"]["x"] = self.x()
+        self.config["window_position"]["y"] = self.y()
+        self.config_manager.save_config(self.config)
+        QApplication.quit()
+
+
+def run_qt_widget():
+    """Run widget"""
+    app = QApplication(sys.argv)
+    # Ensure app stays in background
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontShowIconsInMenus)
+    widget = ClockWidgetQt()
+    widget.show()
+    # Force to background after show
+    widget.lower()
+    sys.exit(app.exec())

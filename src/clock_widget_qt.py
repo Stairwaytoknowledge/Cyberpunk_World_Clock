@@ -446,10 +446,15 @@ class ClockWidgetQt(QWidget):
                 slot.date_label.setText(data["date"])
                 alert = data.get("dst_alert", "")
                 if alert:
+                    # Swap the date out for the alert so we stay in the
+                    # same vertical footprint - adding a 5th line would
+                    # spill below the pill's rounded bottom.
+                    slot.date_label.hide()
                     slot.dst_label.setText(alert)
                     slot.dst_label.show()
                 else:
                     slot.dst_label.hide()
+                    slot.date_label.show()
 
     def _refresh_count_buttons(self):
         """Enable/disable +/- buttons at the supported limits."""

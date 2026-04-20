@@ -4,6 +4,20 @@ A small translucent desktop widget for Windows 10/11 that shows the current time
 
 ![World Clock widget screenshot](docs/screenshot.png)
 
+<details>
+<summary>More screenshots</summary>
+
+**On hover — reveals the +/- (add/remove city) and settings/close buttons inside the right curve:**
+![Hover state](docs/screenshot-hover.png)
+
+**With 6 cities (max):**
+![6 cities](docs/screenshot-6cities.png)
+
+**DST alert — shown 7 days before a fall-back transition, replaces the date line in magenta:**
+![DST alert](docs/screenshot-dst-alert.png)
+
+</details>
+
 ---
 
 ## How to install it (2 clicks)
@@ -101,18 +115,41 @@ git push origin v1.0.1
 ### Microsoft Store packaging
 See [STORE_SUBMISSION.md](STORE_SUBMISSION.md) and `build/build_msix.ps1`.
 
+### Run the test suite
+```bash
+pip install pytest
+pytest tests/ -v
+```
+On a Windows runner with no display, the tests auto-enable Qt's `offscreen` platform plugin via `tests/conftest.py`.
+
 ### Project layout
 ```
 main_qt.py            entry point
-src/                  clock manager, widget, city selector
+src/                  clock manager, widget, city selector (PyQt6)
+tests/                pytest suite (clock manager, config, widget smoke)
 assets/cities.json    130+ city → timezone mapping
 assets/fonts/         bundled Orbitron font (SIL OFL 1.1)
 build/                icon + bundle + MSIX build scripts
+docs/                 screenshots for the README
 Install.bat           shortcut creator for end users
 Launch.vbs            silent launcher (no console flash)
 Uninstall.bat         removes shortcuts + kills running widget
+.github/workflows/
+  ci.yml              runs on every push/PR - tests + bundle build
+  release.yml         runs on v* tags - publishes GitHub Release
 ```
+
+### CI
+
+Every push to `main` and every PR triggers `.github/workflows/ci.yml`, which:
+1. Runs `pytest` on Python 3.10, 3.11, and 3.12 (Windows).
+2. Builds the self-contained bundle.
+3. Verifies every file the installer needs is present in the bundle.
+4. Launches the bundled `pythonw.exe` against the widget and fails if Qt emits a fatal message.
+5. Uploads the built bundle as an artifact (7-day retention) so you can download and test a PR's bundle without waiting for a tag.
+
+Every `v*` tag triggers `.github/workflows/release.yml`, which runs the same tests and publishes the zip to a GitHub Release.
 
 ### License
 
-Application code is MIT unless noted otherwise. The bundled **Orbitron** font is licensed under the SIL Open Font License 1.1 — see `assets/fonts/OFL.txt`.
+MIT — see [`LICENSE`](LICENSE). The bundled **Orbitron** font is under the SIL Open Font License 1.1, see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt).

@@ -101,8 +101,10 @@ class ClockWidgetQt(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
-        # Size
-        self.setFixedSize(920, 180)
+        # Size - same width as before, reduced height so the empty lower
+        # band is gone. Vertical padding above the city label and below
+        # the date label is now symmetric (~22 px each).
+        self.setFixedSize(920, 110)
 
         # Position
         x = self.config["window_position"]["x"]
@@ -117,32 +119,35 @@ class ClockWidgetQt(QWidget):
 
     def create_ui(self):
         """Create UI elements"""
-        # Main layout
+        # Main layout - a single content band, no bottom stretch anymore.
+        # The control buttons are floated on top of the right curve as
+        # children of `self` (see create_control_buttons), so they don't
+        # claim any layout space.
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Content container
         content_widget = QWidget()
         content_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(40, 30, 40, 20)
-        content_layout.setSpacing(8)
+        # Symmetric vertical padding: same `y` above the city labels as
+        # below the date labels. Right margin reserves room for the
+        # floating 2x2 button cluster so clocks are never clipped, even
+        # when the cluster is visible on hover.
+        content_layout.setContentsMargins(40, 18, 90, 18)
+        content_layout.setSpacing(4)
 
         # Clocks row - rebuilt whenever the city count changes
         self.clocks_layout = QHBoxLayout()
         self.clock_labels = []
         self._rebuild_clock_row()
-
         content_layout.addLayout(self.clocks_layout)
-        content_layout.addStretch()
-
-        # Buttons
-        self.create_control_buttons()
-        content_layout.addLayout(self.buttons_layout)
-        self.hide_controls()
 
         main_layout.addWidget(content_widget)
+
+        # Floating right-cluster controls (hidden until hover)
+        self.create_control_buttons()
+        self.hide_controls()
 
     def _rebuild_clock_row(self):
         """Tear down and re-create clock displays for the current city count.
@@ -261,76 +266,48 @@ class ClockWidgetQt(QWidget):
 
         return container
 
-    def create_control_buttons(self):
-        """Create buttons"""
-        self.buttons_layout = QHBoxLayout()
-        self.buttons_layout.addStretch()
-        self.buttons_layout.setSpacing(8)
+    # Dimensions of the right-side button cluster. Two rows of two 24x24
+    # square buttons with 4 px gaps. Kept small so the cluster nests
+    # inside the right-curve semicircle without swallowing digits.
+    BTN_SIZE = 24
+    BTN_GAP  = 4
 
-        # Shared cyberpunk button base - subtle translucent dark fill,
-        # cyan border that brightens on hover.
+    def create_control_buttons(self):
+        """Create the 4 control buttons as direct children of `self` so
+        they can be floated over the right curve instead of occupying
+        their own layout row. Positioned by _position_control_buttons()."""
+        # Shared cyberpunk button style - translucent dark fill, cyan
+        # border that brightens on hover.
         cyber_btn_css = """
             QPushButton {
-                background: rgba(20, 32, 52, 160);
+                background: rgba(20, 32, 52, 180);
                 color: rgba(190, 240, 255, 240);
-                border: 1px solid rgba(0, 229, 255, 120);
-                border-radius: 8px;
+                border: 1px solid rgba(0, 229, 255, 140);
+                border-radius: 6px;
                 font-family: %s;
-                font-size: 13pt;
+                font-size: 10pt;
                 font-weight: 700;
             }
             QPushButton:hover {
-                background: rgba(0, 60, 90, 200);
+                background: rgba(0, 60, 90, 220);
                 color: rgba(230, 250, 255, 255);
-                border: 1px solid rgba(0, 245, 255, 220);
+                border: 1px solid rgba(0, 245, 255, 230);
             }
-            QPushButton:pressed { background: rgba(0, 100, 140, 220); }
+            QPushButton:pressed { background: rgba(0, 100, 140, 230); }
             QPushButton:disabled {
                 color: rgba(120, 170, 200, 80);
-                border: 1px solid rgba(0, 229, 255, 40);
+                border: 1px solid rgba(0, 229, 255, 50);
             }
         """ % FALLBACK_STACK
 
-        # Remove-city ( - )  /  Add-city ( + )
-        minus_btn = QPushButton("\u2212")
-        minus_btn.setFixedSize(32, 32)
-        minus_btn.setStyleSheet(cyber_btn_css)
-        minus_btn.clicked.connect(self.remove_city)
-        minus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        minus_btn.setToolTip("Remove last city")
-        self.buttons_layout.addWidget(minus_btn)
-
-        plus_btn = QPushButton("+")
-        plus_btn.setFixedSize(32, 32)
-        plus_btn.setStyleSheet(cyber_btn_css)
-        plus_btn.clicked.connect(self.add_city)
-        plus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        plus_btn.setToolTip("Add a city (max 6)")
-        self.buttons_layout.addWidget(plus_btn)
-
-        self.minus_btn = minus_btn
-        self.plus_btn = plus_btn
-        self._refresh_count_buttons()
-
-        # Settings - same cyan theme as +/-
-        settings_btn = QPushButton("\u2699")
-        settings_btn.setFixedSize(45, 32)
-        settings_btn.setStyleSheet(cyber_btn_css)
-        settings_btn.clicked.connect(self.show_settings)
-        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.buttons_layout.addWidget(settings_btn)
-
-        # Close - red accent so it still reads as destructive
-        close_btn = QPushButton("\u2715")
-        close_btn.setFixedSize(45, 32)
-        close_btn.setStyleSheet(f"""
+        close_css = f"""
             QPushButton {{
-                background: rgba(40, 12, 20, 180);
+                background: rgba(40, 12, 20, 200);
                 color: rgba(255, 190, 200, 245);
-                border: 1px solid rgba(255, 80, 110, 180);
-                border-radius: 8px;
+                border: 1px solid rgba(255, 80, 110, 200);
+                border-radius: 6px;
                 font-family: {FALLBACK_STACK};
-                font-size: 13pt;
+                font-size: 10pt;
                 font-weight: 800;
             }}
             QPushButton:hover {{
@@ -339,13 +316,48 @@ class ClockWidgetQt(QWidget):
                 border: 1px solid rgba(255, 100, 140, 255);
             }}
             QPushButton:pressed {{ background: rgba(180, 30, 50, 255); }}
-        """)
-        close_btn.clicked.connect(self.close_app)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.buttons_layout.addWidget(close_btn)
+        """
 
-        self.settings_btn = settings_btn
-        self.close_btn = close_btn
+        def _mk(text, css, slot, tooltip):
+            b = QPushButton(text, self)
+            b.setFixedSize(self.BTN_SIZE, self.BTN_SIZE)
+            b.setStyleSheet(css)
+            b.clicked.connect(slot)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            if tooltip:
+                b.setToolTip(tooltip)
+            return b
+
+        self.minus_btn    = _mk("\u2212", cyber_btn_css, self.remove_city,   "Remove last city")
+        self.plus_btn     = _mk("+",      cyber_btn_css, self.add_city,      "Add a city (max 6)")
+        self.settings_btn = _mk("\u2699", cyber_btn_css, self.show_settings, "Settings")
+        self.close_btn    = _mk("\u2715", close_css,     self.close_app,     "Close")
+
+        self._refresh_count_buttons()
+        self._position_control_buttons()
+
+    def _position_control_buttons(self):
+        """Place the 2x2 cluster against the right-side curve, vertically
+        centered. Called on init and on every resize."""
+        if not hasattr(self, "minus_btn"):
+            return
+        s, g = self.BTN_SIZE, self.BTN_GAP
+        cluster_w = 2 * s + g
+        cluster_h = 2 * s + g
+        # Inset from the right edge. For a 110-tall pill the right
+        # semicircle has radius 55; keep the cluster clear of the curve.
+        right_inset = 32
+        x0 = self.width() - cluster_w - right_inset
+        y0 = (self.height() - cluster_h) // 2
+        # Layout:
+        #   -  +
+        #   |@|  X
+        self.minus_btn.move(x0,              y0)
+        self.plus_btn.move (x0 + s + g,      y0)
+        self.settings_btn.move(x0,           y0 + s + g)
+        self.close_btn.move(x0 + s + g,      y0 + s + g)
+        for b in (self.minus_btn, self.plus_btn, self.settings_btn, self.close_btn):
+            b.raise_()
 
     def paintEvent(self, event):
         """Cyberpunk pill: translucent dark slate body with a cyan neon rim
@@ -355,10 +367,11 @@ class ClockWidgetQt(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # Pill geometry (fixed-corner oval)
+        # Pill geometry (fixed-corner oval). Radius is half the height so
+        # the left/right ends are true semicircles.
         rect = self.rect()
         path = QPainterPath()
-        radius = 90
+        radius = self.height() // 2
         path.addRoundedRect(QRectF(rect), radius, radius)
         painter.setClipPath(path)
 
@@ -412,14 +425,15 @@ class ClockWidgetQt(QWidget):
         painter.fillPath(scan_path, scan)
 
     def resizeEvent(self, event):
-        """Apply mask on resize to clip to pill shape"""
+        """Apply mask on resize to clip to pill shape, and reposition the
+        floating right-side button cluster."""
         super().resizeEvent(event)
-        # Create region mask for pill shape
-        region = QRegion(self.rect(), QRegion.RegionType.Ellipse)
+        radius = self.height() // 2
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 90, 90)
+        path.addRoundedRect(QRectF(self.rect()), radius, radius)
         region = QRegion(path.toFillPolygon().toPolygon())
         self.setMask(region)
+        self._position_control_buttons()
 
     def update_clocks(self):
         """Update clocks"""

@@ -19,13 +19,28 @@ echo.
 echo ===== World Clock Installer =====
 echo.
 
-if not exist "runtime\pythonw.exe" (
-    echo  ! This installer expects a self-contained build.
-    echo    Did you extract the entire WorldClock-vX.Y.Z folder?
-    echo    The folder must contain a "runtime" subfolder with pythonw.exe.
-    echo.
-    pause & exit /b 1
-)
+if not exist "runtime\pythonw.exe" goto :need_runtime
+goto :have_runtime
+
+:need_runtime
+echo.
+echo  ! Install.bat expects a self-contained build with a runtime
+echo    subfolder next to it.  Two common reasons this check fails:
+echo.
+echo    1. You downloaded the release zip but only extracted part of
+echo       it.  Right-click the zip and choose Extract All, then run
+echo       Install.bat from the fully extracted folder.
+echo.
+echo    2. You cloned the source repo from GitHub.  Source clones do
+echo       not include the runtime.  Either download the ready-to-run
+echo       zip from the Releases page, or build the bundle yourself:
+echo           powershell -File build\build_bundle.ps1 -Version v0.0.0
+echo       and run Install.bat from dist\WorldClock-v0.0.0\.
+echo.
+pause
+exit /b 1
+
+:have_runtime
 
 rem ---- Resolve the REAL Desktop / Startup folders ----
 rem  On many machines (OneDrive-backed profiles, custom shell folders) the

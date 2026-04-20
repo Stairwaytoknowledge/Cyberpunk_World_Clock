@@ -50,8 +50,8 @@ jobs:
       - name: Zip the bundle
         shell: pwsh
         run: |
-          $folder = "dist/WorldClock-${{ github.ref_name }}"
-          $zip    = "dist/WorldClock-${{ github.ref_name }}.zip"
+          $folder = "dist/CyberpunkClock-${{ github.ref_name }}"
+          $zip    = "dist/CyberpunkClock-${{ github.ref_name }}.zip"
           Compress-Archive -Path "$folder/*" -DestinationPath $zip -CompressionLevel Optimal
           $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
           Write-Host "Built $zip ($size MB)"
@@ -59,17 +59,19 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: World Clock ${{ github.ref_name }}
+          name: Cyberpunk World Clock ${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
           body: |
             ## Install
-            1. Download **`WorldClock-${{ github.ref_name }}.zip`** below.
+            1. Download **`CyberpunkClock-${{ github.ref_name }}.zip`** below.
             2. Right-click → **Extract All...**
             3. Open the extracted folder and double-click **`Install.bat`**.
+
+            A **Cyberpunk Clock** icon will appear on your Desktop. Double-click it any time to show the widget.
 
             No Python install, no SmartScreen warning, no internet needed during install.
 
             To remove: run **`Uninstall.bat`** in the same folder, then delete the folder.
-          files: dist/WorldClock-${{ github.ref_name }}.zip
+          files: dist/CyberpunkClock-${{ github.ref_name }}.zip

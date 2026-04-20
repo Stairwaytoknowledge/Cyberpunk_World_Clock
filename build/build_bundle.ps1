@@ -1,7 +1,7 @@
 <#
-    Builds a fully self-contained World Clock release.
+    Builds a fully self-contained Cyberpunk World Clock release.
 
-    Output:  dist\WorldClock-<version>\
+    Output:  dist\CyberpunkClock-<version>\
         runtime\                        <- embeddable Python + PyQt6 + tzdata
         src\, assets\, main_qt.py       <- the app
         Install.bat, Launch.vbs, Uninstall.bat, README.md
@@ -23,7 +23,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
 
-$stage   = Join-Path $root "dist\WorldClock-$Version"
+$stage   = Join-Path $root "dist\CyberpunkClock-$Version"
 $runtime = Join-Path $stage "runtime"
 
 Write-Host "[1/6] Cleaning $stage" -ForegroundColor Cyan

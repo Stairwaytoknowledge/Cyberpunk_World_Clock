@@ -65,7 +65,7 @@ jobs:
       - name: Verify the bundle has everything an installer needs
         shell: pwsh
         run: |
-          $stage = "dist/WorldClock-v0.0.0-ci"
+          $stage = "dist/CyberpunkClock-v0.0.0-ci"
           foreach ($need in @(
               "$stage/Install.bat",
               "$stage/Launch.vbs",
@@ -84,9 +84,9 @@ jobs:
         shell: pwsh
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
-          & "dist/WorldClock-v0.0.0-ci/runtime/python.exe" - <<'PY'
+          & "dist/CyberpunkClock-v0.0.0-ci/runtime/python.exe" - <<'PY'
           import os, sys
-          os.chdir("dist/WorldClock-v0.0.0-ci")
+          os.chdir("dist/CyberpunkClock-v0.0.0-ci")
           sys.path.insert(0, ".")
           from PyQt6.QtCore import QTimer, qInstallMessageHandler, QtMsgType
           from PyQt6.QtWidgets import QApplication
@@ -104,6 +104,6 @@ jobs:
       - name: Upload bundle artifact (for manual download + testing)
         uses: actions/upload-artifact@v4
         with:
-          name: WorldClock-ci-${{ github.sha }}
-          path: dist/WorldClock-v0.0.0-ci/
+          name: CyberpunkClock-ci-${{ github.sha }}
+          path: dist/CyberpunkClock-v0.0.0-ci/
           retention-days: 7

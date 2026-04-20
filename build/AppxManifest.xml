@@ -27,7 +27,7 @@
       ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>World Clock</DisplayName>
+    <DisplayName>Cyberpunk World Clock</DisplayName>
     <PublisherDisplayName>PUBLISHER_DISPLAY_NAME</PublisherDisplayName>
     <Logo>assets\store\StoreLogo.png</Logo>
   </Properties>
@@ -45,12 +45,12 @@
 
   <Applications>
     <Application
-        Id="WorldClock"
-        Executable="WorldClock.exe"
+        Id="CyberpunkClock"
+        Executable="CyberpunkClock.exe"
         EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-          DisplayName="World Clock"
-          Description="A floating desktop widget that shows the time in four cities."
+          DisplayName="Cyberpunk World Clock"
+          Description="Translucent neon desktop clock for remote workers tracking 4 to 6 time zones."
           BackgroundColor="transparent"
           Square150x150Logo="assets\store\Square150x150Logo.png"
           Square44x44Logo="assets\store\Square44x44Logo.png">
@@ -58,7 +58,7 @@
             Wide310x150Logo="assets\store\Wide310x150Logo.png"
             Square310x310Logo="assets\store\Square310x310Logo.png"
             Square71x71Logo="assets\store\Square71x71Logo.png"
-            ShortName="WorldClock" />
+            ShortName="Cyberpunk Clock" />
         <uap:SplashScreen Image="assets\store\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
@@ -67,9 +67,9 @@
              "installed as OFF"; the user opts in.  -->
         <uap5:Extension Category="windows.startupTask">
           <uap5:StartupTask
-              TaskId="WorldClockStartup"
+              TaskId="CyberpunkClockStartup"
               Enabled="false"
-              DisplayName="World Clock" />
+              DisplayName="Cyberpunk World Clock" />
         </uap5:Extension>
       </Extensions>
     </Application>

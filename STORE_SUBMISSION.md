@@ -1,6 +1,6 @@
 # Microsoft Store submission walkthrough
 
-This guide takes you from "I have built `dist\WorldClock.msix`" to a live
+This guide takes you from "I have built `dist\CyberpunkClock.msix`" to a live
 Store listing. Read it once before your first submission.
 
 ---
@@ -20,7 +20,7 @@ After approval you will see a **Publisher display name**, **Publisher ID**
 ## 2. Reserve the app name
 
 1. In Partner Center: **Apps and games -> New product -> MSIX or PWA app**.
-2. Reserve the name `World Clock` (or another name if taken).
+2. Reserve the name `Cyberpunk World Clock` (or another name if taken).
 3. Open the new product, then **Product identity** in the left nav.
 4. Copy the three values shown there:
     * `Package/Identity/Name`            -> `PACKAGE_IDENTITY_NAME`
@@ -48,7 +48,7 @@ Commit this file - you only need to do it once.
 powershell -ExecutionPolicy Bypass -File build\build_msix.ps1 -Version 1.0.0.0
 ```
 
-Output: `dist\WorldClock.msix`. The Store re-signs the package, so you do
+Output: `dist\CyberpunkClock.msix`. The Store re-signs the package, so you do
 NOT need a code-signing certificate for submission.
 
 Bump `-Version` (e.g. `1.0.1.0`) for every new submission; the last
@@ -63,7 +63,7 @@ segment must stay `0`.
    data collection - all answers are "No").
 4. **Age ratings**: complete the IARC questionnaire. For a clock widget
    the result will be 3+ in every market.
-5. **Packages**: drag and drop `dist\WorldClock.msix`. Wait for the
+5. **Packages**: drag and drop `dist\CyberpunkClock.msix`. Wait for the
    automated validation to pass (a few minutes).
 6. **Store listings -> English (United States)**:
     * Description: paste from `README.md` or rewrite.
@@ -104,7 +104,7 @@ For every release:
 ```powershell
 # one-time: create a self-signed cert
 $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=PUBLISHER_ID" `
-        -KeyUsage DigitalSignature -FriendlyName "WorldClock Sideload" `
+        -KeyUsage DigitalSignature -FriendlyName "CyberpunkClock Sideload" `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3","2.5.29.19={text}")
 $pwd = ConvertTo-SecureString -String "test" -Force -AsPlainText

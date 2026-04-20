@@ -1,13 +1,13 @@
 @echo off
 rem ============================================================
-rem  World Clock - one-click installer (self-contained)
+rem  Cyberpunk World Clock - one-click installer (self-contained)
 rem
 rem  No internet, no Python install, no dependencies.
-rem  Everything World Clock needs is already inside this folder.
+rem  Everything the clock needs is already inside this folder.
 rem
 rem  All this script does:
 rem    1. Verify the bundled runtime is present
-rem    2. Drop a "World Clock" shortcut on your Desktop
+rem    2. Drop a "Cyberpunk Clock" shortcut on your Desktop
 rem    3. Optionally add it to Startup
 rem    4. Optionally launch it now
 rem ============================================================
@@ -16,7 +16,7 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo.
-echo ===== World Clock Installer =====
+echo ===== Cyberpunk World Clock Installer =====
 echo.
 
 if not exist "runtime\pythonw.exe" goto :need_runtime
@@ -35,7 +35,7 @@ echo    2. You cloned the source repo from GitHub.  Source clones do
 echo       not include the runtime.  Either download the ready-to-run
 echo       zip from the Releases page, or build the bundle yourself:
 echo           powershell -File build\build_bundle.ps1 -Version v0.0.0
-echo       and run Install.bat from dist\WorldClock-v0.0.0\.
+echo       and run Install.bat from dist\CyberpunkClock-v0.0.0\.
 echo.
 pause
 exit /b 1
@@ -51,7 +51,7 @@ for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]
 
 set "VBS=%~dp0Launch.vbs"
 set "ICON=%~dp0assets\icon.ico"
-set "SHORTCUT=%DESKTOP%\World Clock.lnk"
+set "SHORTCUT=%DESKTOP%\Cyberpunk Clock.lnk"
 
 echo Creating Desktop shortcut: %SHORTCUT%
 powershell -NoProfile -Command ^
@@ -60,7 +60,7 @@ powershell -NoProfile -Command ^
   "$s.Arguments  = '\"%VBS%\"';" ^
   "$s.WorkingDirectory = '%~dp0';" ^
   "$s.IconLocation = '%ICON%,0';" ^
-  "$s.Description  = 'World Clock - desktop widget';" ^
+  "$s.Description  = 'Cyberpunk World Clock';" ^
   "$s.Save()"
 
 if not exist "%SHORTCUT%" (
@@ -70,21 +70,21 @@ if not exist "%SHORTCUT%" (
 )
 
 echo.
-choice /C YN /N /M "Launch World Clock when Windows starts? [Y/N] "
+choice /C YN /N /M "Launch Cyberpunk Clock when Windows starts? [Y/N] "
 if errorlevel 2 goto skip_autostart
-copy /Y "%SHORTCUT%" "%STARTUP%\World Clock.lnk" >nul
+copy /Y "%SHORTCUT%" "%STARTUP%\Cyberpunk Clock.lnk" >nul
 echo  - Added to Startup folder.
 :skip_autostart
 
 echo.
-choice /C YN /N /M "Launch World Clock right now? [Y/N] "
+choice /C YN /N /M "Launch Cyberpunk Clock right now? [Y/N] "
 if errorlevel 2 goto skip_launch
 start "" wscript.exe "%VBS%"
 :skip_launch
 
 echo.
 echo ============================================================
-echo  Done.  Double-click "World Clock" on your Desktop any time.
+echo  Done.  Double-click "Cyberpunk Clock" on your Desktop any time.
 echo  To remove, run Uninstall.bat in this folder.
 echo ============================================================
 echo.

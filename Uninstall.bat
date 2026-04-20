@@ -1,6 +1,6 @@
 @echo off
 rem ============================================================
-rem  World Clock - uninstaller
+rem  Cyberpunk World Clock - uninstaller
 rem
 rem  Removes the Desktop and Startup shortcuts and stops any
 rem  running instance.  Optionally removes saved settings.
@@ -13,7 +13,7 @@ setlocal
 cd /d "%~dp0"
 
 echo.
-echo ===== World Clock Uninstaller =====
+echo ===== Cyberpunk World Clock Uninstaller =====
 echo.
 
 rem -- Stop any running instance launched from THIS install folder.
@@ -25,8 +25,14 @@ powershell -NoProfile -Command ^
 
 for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%D"
 for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Startup')"`) do set "STARTUP=%%D"
-set "DESKTOP_LNK=%DESKTOP%\World Clock.lnk"
-set "STARTUP_LNK=%STARTUP%\World Clock.lnk"
+set "DESKTOP_LNK=%DESKTOP%\Cyberpunk Clock.lnk"
+set "STARTUP_LNK=%STARTUP%\Cyberpunk Clock.lnk"
+
+rem Also clean up the pre-rebrand "World Clock.lnk" names if an older
+rem install left them behind, so updating from v0.3.x doesn't leave
+rem orphan shortcuts.
+set "OLD_DESKTOP_LNK=%DESKTOP%\World Clock.lnk"
+set "OLD_STARTUP_LNK=%STARTUP%\World Clock.lnk"
 
 if exist "%DESKTOP_LNK%" (
     del /F /Q "%DESKTOP_LNK%"
@@ -36,6 +42,8 @@ if exist "%STARTUP_LNK%" (
     del /F /Q "%STARTUP_LNK%"
     echo  - removed Startup shortcut
 )
+if exist "%OLD_DESKTOP_LNK%" del /F /Q "%OLD_DESKTOP_LNK%"
+if exist "%OLD_STARTUP_LNK%" del /F /Q "%OLD_STARTUP_LNK%"
 
 if not exist "config.json" goto done
 

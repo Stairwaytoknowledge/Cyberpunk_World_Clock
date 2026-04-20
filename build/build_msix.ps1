@@ -1,5 +1,5 @@
 <#
-    Builds dist\WorldClock.msix for Microsoft Store submission.
+    Builds dist\CyberpunkClock.msix for Microsoft Store submission.
 
     Prerequisites (one-time):
       * Python 3.10+ on PATH
@@ -10,7 +10,7 @@
         powershell -ExecutionPolicy Bypass -File build\build_msix.ps1 -Version 1.0.0.0
 
     Output:
-        dist\WorldClock.msix    <- upload this to Partner Center
+        dist\CyberpunkClock.msix    <- upload this to Partner Center
 
     The Store re-signs uploaded MSIX packages, so you do NOT need to sign
     the package yourself for submission. Pass -Sign only if you want a
@@ -42,7 +42,7 @@ python build\generate_icons.py
 Write-Host "[3/5] Running PyInstaller (--onedir)..." -ForegroundColor Cyan
 python -m PyInstaller --clean --noconfirm build\WorldClock_onedir.spec
 
-$stage = Join-Path $root "dist\WorldClock"
+$stage = Join-Path $root "dist\CyberpunkClock"
 if (-not (Test-Path $stage)) { throw "PyInstaller output missing: $stage" }
 
 Write-Host "[4/5] Staging MSIX payload..." -ForegroundColor Cyan
@@ -75,7 +75,7 @@ if (-not $makeappx) {
     throw "makeappx.exe not found under $sdkRoot.  Install the Windows 10/11 SDK."
 }
 
-$out = Join-Path $root "dist\WorldClock.msix"
+$out = Join-Path $root "dist\CyberpunkClock.msix"
 if (Test-Path $out) { Remove-Item $out }
 & $makeappx.FullName pack /d $stage /p $out /overwrite | Out-Host
 Write-Host "Built: $out" -ForegroundColor Green
@@ -95,5 +95,5 @@ if ($Sign) {
 }
 
 Write-Host ""
-Write-Host "Next: upload dist\WorldClock.msix to Microsoft Partner Center." -ForegroundColor Yellow
+Write-Host "Next: upload dist\CyberpunkClock.msix to Microsoft Partner Center." -ForegroundColor Yellow
 Write-Host "See STORE_SUBMISSION.md for the full walkthrough."

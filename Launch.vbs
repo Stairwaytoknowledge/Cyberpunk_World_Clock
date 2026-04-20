@@ -1,4 +1,4 @@
-' World Clock launcher.
+' Cyberpunk World Clock launcher.
 ' Runs main_qt.py through pythonw.exe (no console window).
 '
 ' Resolution order:
@@ -17,7 +17,7 @@ main = here & "\main_qt.py"
 
 If Not fso.FileExists(main) Then
     MsgBox "main_qt.py not found next to Launch.vbs." & vbCrLf & _
-           "Make sure the whole folder was extracted.", vbExclamation, "World Clock"
+           "Make sure the whole folder was extracted.", vbExclamation, "Cyberpunk Clock"
     WScript.Quit 1
 End If
 
@@ -36,8 +36,8 @@ shell.CurrentDirectory = here
 On Error Resume Next
 shell.Run cmd, 0, False
 If Err.Number <> 0 Then
-    MsgBox "Could not start World Clock." & vbCrLf & vbCrLf & _
+    MsgBox "Could not start Cyberpunk Clock." & vbCrLf & vbCrLf & _
            "Install Python from https://python.org, or run Install.bat from a " & _
-           "release bundle.", vbExclamation, "World Clock"
+           "release bundle.", vbExclamation, "Cyberpunk Clock"
     WScript.Quit 1
 End If

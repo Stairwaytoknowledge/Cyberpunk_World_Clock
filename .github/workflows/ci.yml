@@ -33,7 +33,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest psutil
 
       - name: Run pytest (headless Qt via QT_QPA_PLATFORM=offscreen)
         env:

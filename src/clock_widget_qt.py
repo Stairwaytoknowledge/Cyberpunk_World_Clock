@@ -4,7 +4,8 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton,
                               QHBoxLayout, QVBoxLayout, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QTimer, QPoint, QPointF, QRectF, QRect
 from PyQt6.QtGui import (QPainter, QColor, QPen, QPainterPath, QLinearGradient,
-                          QRadialGradient, QPalette, QRegion, QBrush, QFontDatabase)
+                          QRadialGradient, QPalette, QRegion, QBrush,
+                          QFontDatabase, QPixmap)
 from src.clock_manager import ClockManager
 from src.config_manager import ConfigManager
 from src.city_selector_qt import CitySelectorQt
@@ -251,12 +252,12 @@ class ClockWidgetQt(QWidget):
         """)
         dst_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dst_label.hide()
-        # Subtle magenta glow to match the cyber theme
-        dst_glow = QGraphicsDropShadowEffect(dst_label)
-        dst_glow.setBlurRadius(14)
-        dst_glow.setOffset(0, 0)
-        dst_glow.setColor(QColor(255, 90, 190, 180))
-        dst_label.setGraphicsEffect(dst_glow)
+        # The magenta glow is deliberately NOT attached here - the DST
+        # label is empty for ~357 days of the year, so keeping a live
+        # QGraphicsDropShadowEffect (plus its backing offscreen buffer)
+        # would waste memory for no visible benefit. The effect is
+        # attached on demand in update_clocks() the first time the
+        # label is shown.
         layout.addWidget(dst_label)
 
         container.city_label = city_label
@@ -359,59 +360,55 @@ class ClockWidgetQt(QWidget):
         for b in (self.minus_btn, self.plus_btn, self.settings_btn, self.close_btn):
             b.raise_()
 
-    def paintEvent(self, event):
-        """Cyberpunk pill: translucent dark slate body with a cyan neon rim
-        and a soft scanline highlight near the top.  Much more see-through
-        than the old Apple-style pane - the main fill alpha sits around
-        130/255 (~50%) so the desktop shows through."""
-        painter = QPainter(self)
+    def _render_background_to_pixmap(self, size):
+        """Build the pill's static background into a transparent QPixmap
+        so paintEvent can just blit it on every tick."""
+        pm = QPixmap(size)
+        pm.fill(QColor(0, 0, 0, 0))  # fully transparent - the pill shape clips it
+        painter = QPainter(pm)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # Pill geometry (fixed-corner oval). Radius is half the height so
-        # the left/right ends are true semicircles.
         rect = self.rect()
-        path = QPainterPath()
         radius = self.height() // 2
-        path.addRoundedRect(QRectF(rect), radius, radius)
-        painter.setClipPath(path)
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(rect), radius, radius)
+        painter.setClipPath(clip)
 
-        # Layer 1: Outer cyan glow halo (very faint concentric rings)
-        for i in range(10, 0, -1):
+        # Layer 1: outer cyan glow halo - 5 rings is visually
+        # indistinguishable from the old 10 but allocates half the paths
+        for i in (9, 7, 5, 3, 1):
             halo = QColor(0, 229, 255, max(0, int(12 - i * 1.1)))
             r = rect.adjusted(i, i, -i, -i)
             p = QPainterPath()
             p.addRoundedRect(QRectF(r), radius - i, radius - i)
             painter.fillPath(p, halo)
 
-        # Layer 2: Main body - dark slate gradient, deliberately translucent
+        # Layer 2: main body - dark slate gradient, ~55% translucent
         main_rect = rect.adjusted(8, 8, -8, -8)
         gradient = QLinearGradient(
             QPointF(main_rect.center().x(), main_rect.top()),
             QPointF(main_rect.center().x(), main_rect.bottom()),
         )
-        # alpha 130-150 = roughly 55% translucent
-        gradient.setColorAt(0.0, QColor(14,  22,  36, 135))   # top     - deep slate blue
-        gradient.setColorAt(0.5, QColor(20,  32,  52, 150))   # middle  - a touch lighter
-        gradient.setColorAt(1.0, QColor(10,  16,  28, 140))   # bottom  - darkest for depth
+        gradient.setColorAt(0.0, QColor(14, 22, 36, 135))
+        gradient.setColorAt(0.5, QColor(20, 32, 52, 150))
+        gradient.setColorAt(1.0, QColor(10, 16, 28, 140))
         main_path = QPainterPath()
         main_path.addRoundedRect(QRectF(main_rect), radius - 8, radius - 8)
         painter.fillPath(main_path, gradient)
 
-        # Layer 3: Cyan neon rim
+        # Layer 3: cyan neon rim
         painter.setPen(QPen(QColor(0, 229, 255, 150), 1.4))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(main_path)
 
-        # Layer 4: Inner soft cyan halo just inside the rim (adds the
-        # "this thing is emitting light" feel without going overboard).
+        # Layer 4: inner soft cyan halo
         painter.setPen(QPen(QColor(0, 229, 255, 55), 2.5))
-        inner_rect = main_rect.adjusted(3, 3, -3, -3)
         inner_path = QPainterPath()
+        inner_rect = main_rect.adjusted(3, 3, -3, -3)
         inner_path.addRoundedRect(QRectF(inner_rect), radius - 11, radius - 11)
         painter.drawPath(inner_path)
 
-        # Layer 5: Top scanline highlight - horizontal cyan streak that
-        # fades down. Gives a CRT / HUD vibe.
+        # Layer 5: top scanline highlight
         scan_rect = QRectF(main_rect.x() + 12, main_rect.y() + 10,
                            main_rect.width() - 24, 32)
         scan = QLinearGradient(
@@ -423,6 +420,22 @@ class ClockWidgetQt(QWidget):
         scan_path = QPainterPath()
         scan_path.addRoundedRect(scan_rect, radius - 20, radius - 20)
         painter.fillPath(scan_path, scan)
+        painter.end()
+        return pm
+
+    def paintEvent(self, event):
+        """Blit the pre-rendered static pill background.  On first paint
+        (or any resize - the widget is fixed-size, so this happens once
+        per instance) we build the pixmap once; every subsequent frame
+        is a single fast drawPixmap call with no QPainterPath or
+        QGradient allocations.  The cache is per-instance so closing
+        one widget doesn't invalidate another's pixmap."""
+        key = (self.width(), self.height())
+        if getattr(self, "_bg_cache_key", None) != key:
+            self._bg_cache_pm  = self._render_background_to_pixmap(self.size())
+            self._bg_cache_key = key
+        painter = QPainter(self)
+        painter.drawPixmap(0, 0, self._bg_cache_pm)
 
     def resizeEvent(self, event):
         """Apply mask on resize to clip to pill shape, and reposition the
@@ -451,6 +464,16 @@ class ClockWidgetQt(QWidget):
                     # spill below the pill's rounded bottom.
                     slot.date_label.hide()
                     slot.dst_label.setText(alert)
+                    # Lazily attach the magenta glow the first time this
+                    # label becomes visible; keeps the effect (and its
+                    # offscreen buffer) out of memory for the 50 weeks
+                    # a year no alert is active.
+                    if slot.dst_label.graphicsEffect() is None:
+                        glow = QGraphicsDropShadowEffect(slot.dst_label)
+                        glow.setBlurRadius(14)
+                        glow.setOffset(0, 0)
+                        glow.setColor(QColor(255, 90, 190, 180))
+                        slot.dst_label.setGraphicsEffect(glow)
                     slot.dst_label.show()
                 else:
                     slot.dst_label.hide()

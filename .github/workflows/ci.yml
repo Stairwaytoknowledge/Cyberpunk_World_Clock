@@ -82,16 +82,19 @@ jobs:
 
       - name: Smoke-launch the bundled pythonw against the widget
         shell: pwsh
+        # PowerShell has no heredoc, so we write the smoke test to a
+        # temp .py file and then run it through the bundled python.exe.
+        # Using here-strings @' ... '@ keeps the Python source verbatim.
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
-          & "dist/CyberpunkClock-v0.0.0-ci/runtime/python.exe" - <<'PY'
+          $smoke = @'
           import os, sys
           os.chdir("dist/CyberpunkClock-v0.0.0-ci")
           sys.path.insert(0, ".")
           from PyQt6.QtCore import QTimer, qInstallMessageHandler, QtMsgType
           from PyQt6.QtWidgets import QApplication
           fatal = []
-          qInstallMessageHandler(lambda m,c,t: fatal.append(t) if m == QtMsgType.QtFatalMsg else None)
+          qInstallMessageHandler(lambda m, c, t: fatal.append(t) if m == QtMsgType.QtFatalMsg else None)
           from src.clock_widget_qt import ClockWidgetQt
           app = QApplication(sys.argv)
           w = ClockWidgetQt(); w.show(); w.lower()
@@ -99,7 +102,9 @@ jobs:
           rc = app.exec()
           print("rc=", rc, "fatal=", fatal)
           sys.exit(1 if fatal else rc)
-          PY
+          '@
+          Set-Content -Path smoke.py -Value $smoke -Encoding UTF8
+          & "dist/CyberpunkClock-v0.0.0-ci/runtime/python.exe" smoke.py
 
       - name: Upload bundle artifact (for manual download + testing)
         uses: actions/upload-artifact@v4
